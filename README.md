@@ -64,7 +64,10 @@ data/observations.csv             # bundled velocity observations
    reconstruction-error diagnostic — the ground-truth field (`new_random_field.npy`).
 2. **Install and set up QUEENS** by following the instructions in the
    [QUEENS GitHub repository](https://github.com/queens-py/queens), then activate its
-   environment (e.g. `conda activate queens`). QUEENS provides numpy and scipy.
+   environment (e.g. `conda activate queens`). QUEENS provides numpy and scipy. This
+   release was developed and tested against QUEENS at commit
+   [`694e30c5`](https://github.com/queens-py/queens/commit/694e30c5df1772a57d6a18f2e62c1605cbf007c8)
+   on the `main` branch.
 3. **Install this package on top of QUEENS** (with the `queens` environment active):
 
    ```bash
