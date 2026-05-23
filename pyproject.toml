@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "high_dim_svi"
+version = "0.1.0"
+description = "Sparse-precision SVI extension for QUEENS — reference code for the 3D Darcy field-reconstruction paper."
+readme = "README.md"
+requires-python = ">=3.10"
+
+# Extra runtime dependencies ON TOP OF QUEENS.
+#
+# QUEENS is intentionally NOT listed here: it is installed separately (editable, from its
+# own repo) and provides numpy and scipy. This project only adds:
+#   * numba      — JIT kernels for the sparse triangular solves / mat-vec (_sparse_linalg.py)
+#   * matplotlib — ELBO convergence plot in post-processing
+dependencies = [
+    "numba",
+    "matplotlib",
+]
+
+[tool.setuptools]
+packages = ["high_dim_svi"]

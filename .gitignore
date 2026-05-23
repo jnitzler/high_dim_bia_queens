@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Numba JIT cache
+*.nbi
+*.nbc
+
+# Demo run outputs (results, plots, posterior fields)
+output/
+
+# Local agent/IDE guidance (not part of the release)
+CLAUDE.md
