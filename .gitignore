@@ -11,5 +11,8 @@ __pycache__/
 # Demo run outputs (results, plots, posterior fields)
 output/
 
+# Result pickles can be very large (serialized variational arrays) -- never commit/share
+*.pickle
+
 # Local agent/IDE guidance (not part of the release)
 CLAUDE.md

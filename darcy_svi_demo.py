@@ -116,7 +116,7 @@ OUTPUT_DIR = Path("./output")
 # --- Problem / algorithm constants (paper baseline; Table 3 + darcy_flow_3d_cluster.yml) ---
 DIMENSION = 405570            # number of random-field DoFs (must match sparsity/init files)
 N_SAMPLES_PER_ITER = 4        # Monte-Carlo batch size per SVI iteration (Table 3: n_batch = 4)
-LEARNING_RATE = 0.04          # Adam step size (cluster YAML darcy_flow_3d_cluster.yml; Table 3 lists 5e-2)
+LEARNING_RATE = 0.05          # Adam step size (paper Table 3: 5e-2)
 RANDOM_SEED = 4               # seed for the reparameterization RNG (cluster YAML: random_seed 4)
 NUGGET_VAR_DIAG = 1.0e-9      # diagonal nugget of the variational precision factor (cluster YAML)
 NUGGET_NOISE_VARIANCE = 1.0e-9  # lower bound on the (VB-EM) noise variance (a0 = b0 = 1e-9)
