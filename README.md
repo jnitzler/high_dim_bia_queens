@@ -62,6 +62,16 @@ data/observations.csv             # bundled velocity observations
    the initial variational parameters (`initial_variational_params_inverse.npy`), the
    deal.II input template (`parameters_template.json`), and — for the optional
    reconstruction-error diagnostic — the ground-truth field (`new_random_field.npy`).
+
+   > **⚠️ MPI-rank / DOF-ordering consistency.** deal.II numbers the distributed DOFs *per
+   > parallel partition*, so the DOF-ordered `.npy` files — the sparsity pattern
+   > (`rf_sparsity_*`), the ground-truth field, and the optional incomplete-Cholesky init — are
+   > valid **only at the MPI rank count they were generated with**, and must match
+   > `NUM_PROCS_PER_JOB` in `darcy_svi_demo.py`. The paper's data was generated at 16 ranks
+   > (cluster); to run locally at a different rank count, regenerate them at *that* count
+   > (`export_sparsity`; `darcy_forward` in ground-truth mode; `compute_prior_init.py`). A
+   > mismatch silently scrambles the field and the reconstruction fails. `observations.csv` is
+   > rank-independent (its output is coordinate-sorted), so it never needs regenerating.
 2. **Install and set up QUEENS** by following the instructions in the
    [QUEENS GitHub repository](https://github.com/queens-py/queens), then activate its
    environment (e.g. `conda activate queens`). QUEENS provides numpy and scipy. This

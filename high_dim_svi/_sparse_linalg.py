@@ -172,6 +172,72 @@ def csr_matvec_multi(indptr, indices, data, b_mat, n, m):
     return y_mat
 
 
+@njit(cache=True)
+def incomplete_cholesky_lower(indptr, indices, a_data, n):
+    r"""Incomplete Cholesky ``IC(0)`` of a symmetric SPD matrix at its sparsity pattern.
+
+    Given the lower-triangular CSR pattern of a symmetric positive-definite matrix ``A``
+    and its values ``a_data``, compute the lower-triangular factor ``L`` with the **same**
+    sparsity pattern (no fill-in) such that ``(L Lᵀ)_{ij} = A_{ij}`` for every stored entry
+    ``(i, j)`` -- the defining property of ``IC(0)``. This is the paper's ``L_Q``
+    initialization: the incomplete Cholesky of the SPDE/GMRF prior precision restricted to
+    the FE-Laplacian sparsity pattern (Section 2.3), without the ``O(n²)`` fill-in of an
+    exact Cholesky and without an external sparse-Cholesky (CHOLMOD) dependency.
+
+    Uses the row-oriented (up-looking) formulation: for row ``i`` the off-diagonals
+    ``L[i,j] = (A[i,j] - Σ_{k<j} L[i,k] L[j,k]) / L[j,j]`` are formed by a two-pointer merge
+    of the already-finalized rows ``i`` and ``j`` over their common columns ``< j``, then the
+    diagonal ``L[i,i] = sqrt(A[i,i] - Σ_{k<i} L[i,k]²)``.
+
+    Requires each CSR row's columns sorted ascending with the diagonal stored **last**
+    (``indices[indptr[i+1]-1] == i``) -- guaranteed by a ``scipy`` ``coo``→``csr`` conversion
+    of a lower-triangular matrix with sorted indices.
+
+    Args:
+        indptr (np.ndarray): CSR row-pointer array (length ``n+1``).
+        indices (np.ndarray): CSR column indices (sorted ascending per row, diagonal last).
+        a_data (np.ndarray): Values of ``A`` aligned with ``indices``.
+        n (int): Matrix dimension.
+
+    Returns:
+        np.ndarray: Values of the ``IC(0)`` factor ``L`` aligned with ``indices``. A
+        non-positive pivot (factorization breakdown) yields ``nan``/``inf`` entries; the
+        caller should detect this and retry with a diagonal shift.
+    """
+    ell = np.zeros_like(a_data)
+    for i in range(n):
+        row_start = indptr[i]
+        row_end = indptr[i + 1]
+        for p in range(row_start, row_end):
+            j = indices[p]
+            if j < i:
+                # off-diagonal L[i,j] = (A[i,j] - sum_{k<j} L[i,k] L[j,k]) / L[j,j]
+                j_start = indptr[j]
+                j_diag = indptr[j + 1] - 1          # position of the diagonal L[j,j]
+                s = a_data[p]
+                a = row_start                        # row i, columns < j  (positions < p)
+                b = j_start                          # row j, columns < j  (positions < j_diag)
+                while a < p and b < j_diag:
+                    ca = indices[a]
+                    cb = indices[b]
+                    if ca == cb:
+                        s -= ell[a] * ell[b]
+                        a += 1
+                        b += 1
+                    elif ca < cb:
+                        a += 1
+                    else:
+                        b += 1
+                ell[p] = s / ell[j_diag]
+            elif j == i:
+                # diagonal L[i,i] = sqrt(A[i,i] - sum_{k<i} L[i,k]^2)
+                s = a_data[p]
+                for q in range(row_start, p):
+                    s -= ell[q] * ell[q]
+                ell[p] = np.sqrt(s)
+    return ell
+
+
 def warmup():
     """Trigger numba JIT compilation of all kernels on tiny dummy inputs.
 
@@ -192,3 +258,9 @@ def warmup():
     csr_lower_triangular_solve_multi(indptr, indices, data, b_mat, 2, 1)
     csr_upper_triangular_solve_multi(indptr, indices, data, b_mat, 2, 1)
     csr_matvec_multi(indptr, indices, data, b_mat, 2, 1)
+
+    # IC(0) on a 2x2 SPD pattern [[2, 0], [1, 2]] (diagonal stored last per row).
+    ic_indptr = np.array([0, 1, 3], dtype=np.int32)
+    ic_indices = np.array([0, 0, 1], dtype=np.int32)
+    ic_data = np.array([2.0, 1.0, 2.0], dtype=np.float64)
+    incomplete_cholesky_lower(ic_indptr, ic_indices, ic_data, 2)

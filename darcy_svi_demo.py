@@ -75,10 +75,30 @@ INPUT_TEMPLATE = DEALII_PROJECT_DIR / "parameters_template.json"
 # is the FE Laplacian connectivity and defines the nonzero structure of the precision factor.
 SPARSITY_PATTERN_PREFIX = str(DEALII_PROJECT_DIR / "rf_sparsity")
 
-# Initial variational parameters [mu, lambda_{L_Q}]. This file is the paper's baseline
-# initialization: the *incomplete Cholesky of the prior precision* with prior mean mu_x = 0.1
-# (Table 3). Layout: 405570 mean + 405570 diagonal + 12478560 off-diagonal = 13289700 entries.
-INITIAL_VARIATIONAL_PARAMS = str(DEALII_PROJECT_DIR / "initial_variational_params_inverse.npy")
+# Initialization of the variational parameters.
+#
+# IMPORTANT (MPI-rank dependence): deal.II numbers the distributed DOFs per parallel partition,
+# so the DOF ordering -- and hence the sparsity pattern files and any precomputed init -- is
+# specific to the MPI rank count they were generated with. They MUST match NUM_PROCS_PER_JOB
+# (see that setting). Using mismatched files silently scrambles the field and the reconstruction
+# fails. The bundled rf_sparsity_*/init files here were regenerated for the local rank count.
+#
+# By default (USE_INCOMPLETE_CHOLESKY_INIT = True) we initialize L_Q from the *incomplete
+# Cholesky of the prior precision* -- the paper's Table 3 initialization -- generated
+# CHOLMOD-free by tools/compute_prior_init.py at the SAME rank count and loaded from
+# INITIAL_VARIATIONAL_PARAMS. The lightweight alternative (set it to False) is the diagonal
+# initialization of Eq. (24): mean = PRIOR_MEAN, precision diagonal = 1/sigma_0^2 (initial
+# marginal variance INIT_MARGINAL_VARIANCE), zero off-diagonals (the SVI then learns them);
+# this needs no precomputed init file, only the rank-matched sparsity pattern.
+PRIOR_MEAN = 0.1                    # prior / initial field mean (Table 3: mu_x = 0.1)
+INIT_MARGINAL_VARIANCE = 0.013523  # initial marginal variance sigma_0^2 (matches the paper init)
+USE_INCOMPLETE_CHOLESKY_INIT = True
+INITIAL_VARIATIONAL_PARAMS = str(DEALII_PROJECT_DIR / "initial_variational_params_inverse_ic0_3rank.npy")
+VARIATIONAL_INIT = (
+    INITIAL_VARIATIONAL_PARAMS
+    if USE_INCOMPLETE_CHOLESKY_INIT
+    else {"mean": PRIOR_MEAN, "variance": INIT_MARGINAL_VARIANCE, "off_diag_range": 0.0}
+)
 
 # Ground-truth log-permeability field x_gt used to monitor the reconstruction error
 # eps_pm = ||mu - x_gt|| / ||x_gt|| (the paper's posterior-mean discrepancy, Sec. 3.4 / Fig. 9a).
@@ -96,7 +116,7 @@ OUTPUT_DIR = Path("./output")
 # --- Problem / algorithm constants (paper baseline; Table 3 + darcy_flow_3d_cluster.yml) ---
 DIMENSION = 405570            # number of random-field DoFs (must match sparsity/init files)
 N_SAMPLES_PER_ITER = 4        # Monte-Carlo batch size per SVI iteration (Table 3: n_batch = 4)
-LEARNING_RATE = 0.05          # Adam step size (Table 3: 5e-2)
+LEARNING_RATE = 0.04          # Adam step size (cluster YAML darcy_flow_3d_cluster.yml; Table 3 lists 5e-2)
 RANDOM_SEED = 4               # seed for the reparameterization RNG (cluster YAML: random_seed 4)
 NUGGET_VAR_DIAG = 1.0e-9      # diagonal nugget of the variational precision factor (cluster YAML)
 NUGGET_NOISE_VARIANCE = 1.0e-9  # lower bound on the (VB-EM) noise variance (a0 = b0 = 1e-9)
@@ -134,12 +154,17 @@ for _path, _desc in [
     (INPUT_TEMPLATE, "deal.II input template"),
     (Path(f"{SPARSITY_PATTERN_PREFIX}_row_idx.npy"), "sparsity pattern row indices"),
     (Path(f"{SPARSITY_PATTERN_PREFIX}_col_idx.npy"), "sparsity pattern column indices"),
-    (Path(INITIAL_VARIATIONAL_PARAMS), "initial variational parameters"),
     (Path(GROUND_TRUTH_FILE), "ground-truth field (reconstruction-error diagnostic)"),
     (OBSERVATIONS_DIR / OBSERVATIONS_FILE, "observations CSV"),
     (OUTPUT_DIR, "output directory"),
 ]:
     assert _path.exists(), f"Missing {_desc}: {_path}"
+
+# The precomputed init file is only needed (and only valid) when using it explicitly.
+if USE_INCOMPLETE_CHOLESKY_INIT:
+    assert Path(INITIAL_VARIATIONAL_PARAMS).exists(), (
+        f"Missing initial variational parameters: {INITIAL_VARIATIONAL_PARAMS}"
+    )
 
 # --------------------------------------------------------------------------------------
 # QUEENS imports (reused as-is) and custom high_dim_svi modules
@@ -357,7 +382,7 @@ if __name__ == "__main__":
             random_seed=RANDOM_SEED,
             max_feval=MAX_FEVAL,
             stochastic_optimizer=optimizer,
-            variational_parameter_initialization=INITIAL_VARIATIONAL_PARAMS,
+            variational_parameter_initialization=VARIATIONAL_INIT,
             ground_truth_file=GROUND_TRUTH_FILE,
             natural_gradient_mean_only=True,
             verbose_every_n_iter=VERBOSE_EVERY_N_ITER,
